@@ -1,3 +1,5 @@
+# Note: This app  is not actively maintained anymore.
+
 # BetterManual
 
 This app is intended to ease shooting in manual and aperture priority mode with (legacy) prime lenses on the A5100 camera. It uses the [OpenMemories Framework](https://github.com/ma1co/OpenMemories-Framework).
