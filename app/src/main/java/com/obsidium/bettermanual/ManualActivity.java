@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.hardware.Camera;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Pair;
@@ -24,7 +25,7 @@ import com.sony.scalar.sysutil.didep.Settings;
 import java.io.IOException;
 import java.util.List;
 
-public class ManualActivity extends BaseActivity implements SurfaceHolder.Callback, View.OnClickListener, CameraEx.ShutterListener, CameraEx.ShutterSpeedChangeListener
+public class ManualActivity extends BaseActivity implements SurfaceHolder.Callback, View.OnClickListener, CameraEx.ShutterListener, CameraEx.ShutterSpeedChangeListener, CameraController
 {
     private static final boolean LOGGING_ENABLED = false;
     private static final int MESSAGE_TIMEOUT = 1000;
@@ -55,6 +56,9 @@ public class ManualActivity extends BaseActivity implements SurfaceHolder.Callba
     private TextView        m_tvHint;
     private FocusScaleView  m_focusScaleView;
     private View            m_lFocusScale;
+
+    // API capture
+    private boolean         m_apiCaptureActive;
 
     // Bracketing
     private int             m_bracketStep;  // in 1/3 stops
@@ -159,6 +163,13 @@ public class ManualActivity extends BaseActivity implements SurfaceHolder.Callba
 
     private boolean         m_takingPicture;
     private boolean         m_shutterKeyDown;
+
+    // Cached state for API server (updated by camera listeners)
+    private int             m_currentShutterSpeedN;
+    private int             m_currentShutterSpeedD;
+    private int             m_currentAperture;
+    private String          m_currentDriveMode = "single";
+    private CameraApiServer m_apiServer;
 
     private boolean         m_haveTouchscreen;
 
@@ -521,6 +532,8 @@ public class ManualActivity extends BaseActivity implements SurfaceHolder.Callba
 
     private void updateShutterSpeed(int n, int d)
     {
+        m_currentShutterSpeedN = n;
+        m_currentShutterSpeedD = d;
         final String text = CameraUtil.formatShutterSpeed(n, d);
         m_tvShutter.setText(text);
         if (m_notifyOnNextShutterSpeedChange)
@@ -698,6 +711,7 @@ public class ManualActivity extends BaseActivity implements SurfaceHolder.Callba
         final String driveMode = paramsModifier.getDriveMode();
         if (driveMode.equals(CameraEx.ParametersModifier.DRIVE_MODE_SINGLE))
         {
+            m_currentDriveMode = "single";
             //noinspection ResourceType
             m_ivDriveMode.setImageResource(SonyDrawables.p_drivemode_n_001);
         }
@@ -706,11 +720,13 @@ public class ManualActivity extends BaseActivity implements SurfaceHolder.Callba
             final String burstDriveSpeed = paramsModifier.getBurstDriveSpeed();
             if (burstDriveSpeed.equals(CameraEx.ParametersModifier.BURST_DRIVE_SPEED_LOW))
             {
+                m_currentDriveMode = "burst_low";
                 //noinspection ResourceType
                 m_ivDriveMode.setImageResource(SonyDrawables.p_drivemode_n_003);
             }
             else if (burstDriveSpeed.equals(CameraEx.ParametersModifier.BURST_DRIVE_SPEED_HIGH))
             {
+                m_currentDriveMode = "burst_high";
                 //noinspection ResourceType
                 m_ivDriveMode.setImageResource(SonyDrawables.p_drivemode_n_002);
             }
@@ -964,6 +980,7 @@ public class ManualActivity extends BaseActivity implements SurfaceHolder.Callba
             {
                 // Disable aperture control if not available
                 m_haveApertureControl = apertureInfo.currentAperture != 0;
+                m_currentAperture = apertureInfo.currentAperture;
                 m_tvAperture.setVisibility(m_haveApertureControl ? View.VISIBLE : View.GONE);
                 /*
                 log(String.format("currentAperture %d currentAvailableMin %d currentAvailableMax %d\n",
@@ -1081,6 +1098,19 @@ public class ManualActivity extends BaseActivity implements SurfaceHolder.Callba
         updateSceneModeImage();
         updateViewVisibility();
 
+        try
+        {
+            m_apiServer = new CameraApiServer(this);
+            m_apiServer.start(5000, true);
+            final String ip = getWifiIpAddress();
+            if (ip != null)
+                showMessage(String.format("API: %s:%d", ip, CameraApiServer.PORT));
+        }
+        catch (IOException e)
+        {
+            // API server unavailable
+        }
+
         /* - triggers NPE
         List<Integer> pf = params.getSupportedPreviewFormats();
         if (pf != null)
@@ -1121,6 +1151,12 @@ public class ManualActivity extends BaseActivity implements SurfaceHolder.Callba
     protected void onPause()
     {
         super.onPause();
+
+        if (m_apiServer != null)
+        {
+            m_apiServer.stop();
+            m_apiServer = null;
+        }
 
         saveDefaults();
 
@@ -1168,6 +1204,15 @@ public class ManualActivity extends BaseActivity implements SurfaceHolder.Callba
             onShutterTimelapse(i);
         else if (m_bracketActive)
             onShutterBracket(i);
+        else if (m_apiCaptureActive)
+            onShutterApiCapture();
+    }
+
+    private void onShutterApiCapture()
+    {
+        m_apiCaptureActive = false;
+        m_camera.startDirectShutter();
+        m_camera.getNormalCamera().startPreview();
     }
 
     private void onShutterBracket(int i)
@@ -1237,21 +1282,15 @@ public class ManualActivity extends BaseActivity implements SurfaceHolder.Callba
     // OnClickListener
     public void onClick(View view)
     {
-        switch (view.getId())
-        {
-            case R.id.ivDriveMode:
-                toggleDriveMode();
-                break;
-            case R.id.ivMode:
-                toggleSceneMode();
-                break;
-            case R.id.ivTimelapse:
-                prepareTimelapse();
-                break;
-            case R.id.ivBracket:
-                prepareBracketing();
-                break;
-        }
+        final int id = view.getId();
+        if (id == R.id.ivDriveMode)
+            toggleDriveMode();
+        else if (id == R.id.ivMode)
+            toggleSceneMode();
+        else if (id == R.id.ivTimelapse)
+            prepareTimelapse();
+        else if (id == R.id.ivBracket)
+            prepareBracketing();
     }
 
     private void decrementTimelapseInterval()
@@ -2003,5 +2042,160 @@ public class ManualActivity extends BaseActivity implements SurfaceHolder.Callba
     protected void setColorDepth(boolean highQuality)
     {
         super.setColorDepth(false);
+    }
+
+    // --- CameraController implementation ---
+
+    @Override public int getShutterSpeedN() { return m_currentShutterSpeedN; }
+    @Override public int getShutterSpeedD() { return m_currentShutterSpeedD; }
+    @Override public int getCurrentIso() { return m_curIso; }
+    @Override public boolean hasApertureControl() { return m_haveApertureControl; }
+    @Override public int getCurrentAperture() { return m_currentAperture; }
+    @Override public int getExposureCompensation() { return m_curExposureCompensation; }
+    @Override public int getMinExposureCompensation() { return m_minExposureCompensation; }
+    @Override public int getMaxExposureCompensation() { return m_maxExposureCompensation; }
+    @Override public float getExposureCompensationStep() { return m_exposureCompensationStep; }
+    @Override public String getDriveModeString() { return m_currentDriveMode; }
+    @Override public List<Integer> getSupportedIsos() { return m_supportedIsos; }
+    @Override public Handler getMainHandler() { return m_handler; }
+
+    @Override
+    public String getSceneModeString()
+    {
+        switch (m_sceneMode)
+        {
+            case manual:   return "manual";
+            case aperture: return "aperture";
+            case shutter:  return "shutter";
+            default:       return "other";
+        }
+    }
+
+    @Override
+    public void cmdIncrementShutter()
+    {
+        if (m_camera != null) m_camera.incrementShutterSpeed();
+    }
+
+    @Override
+    public void cmdDecrementShutter()
+    {
+        if (m_camera != null) m_camera.decrementShutterSpeed();
+    }
+
+    @Override
+    public void cmdSetShutterSpeed(int n, int d)
+    {
+        if (m_camera == null) return;
+        int targetIndex = CameraUtil.getShutterValueIndex(n, d);
+        if (targetIndex < 0) return;
+        int currentIndex = CameraUtil.getShutterValueIndex(m_currentShutterSpeedN, m_currentShutterSpeedD);
+        if (currentIndex < 0) return;
+        int delta = currentIndex - targetIndex;
+        if (delta != 0) m_camera.adjustShutterSpeed(delta);
+    }
+
+    @Override
+    public void cmdSetIso(int iso)
+    {
+        if (m_camera != null) setIso(iso);
+    }
+
+    @Override
+    public void cmdIncrementAperture()
+    {
+        if (m_camera != null) m_camera.incrementAperture();
+    }
+
+    @Override
+    public void cmdDecrementAperture()
+    {
+        if (m_camera != null) m_camera.decrementAperture();
+    }
+
+    @Override
+    public void cmdSetExposureCompensation(int value)
+    {
+        if (m_camera != null) setExposureCompensation(value);
+    }
+
+    @Override
+    public void cmdSetSceneMode(String mode)
+    {
+        if (m_camera == null) return;
+        if ("manual".equals(mode))
+        {
+            setMinShutterSpeed(-1);
+            setSceneMode(CameraEx.ParametersModifier.SCENE_MODE_MANUAL_EXPOSURE);
+        }
+        else if ("aperture".equals(mode))
+        {
+            setMinShutterSpeed(m_prefs.getMinShutterSpeed());
+            setSceneMode(CameraEx.ParametersModifier.SCENE_MODE_APERTURE_PRIORITY);
+        }
+        else if ("shutter".equals(mode))
+        {
+            setMinShutterSpeed(-1);
+            setSceneMode(CameraEx.ParametersModifier.SCENE_MODE_SHUTTER_PRIORITY);
+        }
+    }
+
+    @Override
+    public void cmdSetDriveMode(String mode)
+    {
+        if (m_camera == null) return;
+        final Camera.Parameters params = m_camera.createEmptyParameters();
+        final CameraEx.ParametersModifier modifier = m_camera.createParametersModifier(params);
+        if ("single".equals(mode))
+        {
+            modifier.setDriveMode(CameraEx.ParametersModifier.DRIVE_MODE_SINGLE);
+            modifier.setBurstDriveSpeed(CameraEx.ParametersModifier.BURST_DRIVE_SPEED_HIGH);
+        }
+        else if ("burst_high".equals(mode))
+        {
+            modifier.setDriveMode(CameraEx.ParametersModifier.DRIVE_MODE_BURST);
+            modifier.setBurstDriveSpeed(CameraEx.ParametersModifier.BURST_DRIVE_SPEED_HIGH);
+        }
+        else if ("burst_low".equals(mode))
+        {
+            modifier.setDriveMode(CameraEx.ParametersModifier.DRIVE_MODE_BURST);
+            modifier.setBurstDriveSpeed(CameraEx.ParametersModifier.BURST_DRIVE_SPEED_LOW);
+        }
+        else
+        {
+            return;
+        }
+        m_camera.getNormalCamera().setParameters(params);
+        updateDriveModeImage();
+    }
+
+    @Override
+    public void cmdCapture()
+    {
+        if (m_camera == null || m_apiCaptureActive || m_timelapseActive || m_bracketActive) return;
+        m_apiCaptureActive = true;
+        m_camera.stopDirectShutter(new CameraEx.DirectShutterStoppedCallback()
+        {
+            @Override
+            public void onShutterStopped(CameraEx cameraEx) {}
+        });
+        m_camera.getNormalCamera().stopPreview();
+        m_camera.burstableTakePicture();
+    }
+
+    private String getWifiIpAddress()
+    {
+        try
+        {
+            WifiManager wm = (WifiManager) getSystemService(WIFI_SERVICE);
+            int ip = wm.getConnectionInfo().getIpAddress();
+            if (ip == 0) return null;
+            return String.format("%d.%d.%d.%d",
+                ip & 0xff, (ip >> 8) & 0xff, (ip >> 16) & 0xff, (ip >> 24) & 0xff);
+        }
+        catch (Exception e)
+        {
+            return null;
+        }
     }
 }

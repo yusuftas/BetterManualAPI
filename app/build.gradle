@@ -1,8 +1,8 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 10
-    buildToolsVersion '30.0.2'
+    namespace "com.obsidium.bettermanual"
+    compileSdkVersion 34
 
     defaultConfig {
         applicationId "com.obsidium.bettermanual"
@@ -20,8 +20,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_6
-        targetCompatibility JavaVersion.VERSION_1_6
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 }
 
@@ -33,4 +33,5 @@ repositories {
 dependencies {
     compileOnly 'com.github.ma1co.OpenMemories-Framework:stubs:-SNAPSHOT'
     implementation 'com.github.ma1co.OpenMemories-Framework:framework:-SNAPSHOT'
+    implementation 'org.nanohttpd:nanohttpd:2.3.1'
 }

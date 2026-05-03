@@ -1,5 +1,3 @@
-# Note: This app  is not actively maintained anymore.
-
 # BetterManual
 
 This app is intended to ease shooting in manual and aperture priority mode with (legacy) prime lenses on the A5100 camera. It uses the [OpenMemories Framework](https://github.com/ma1co/OpenMemories-Framework).
@@ -42,3 +40,33 @@ Long exposure noise reduction is disabled (normally forced in single shot mode f
 Exit the app using the help/trash button.
 
 The app remembers the configured settings across multiple runs.
+
+## Remote Control API ##
+
+BetterManual exposes an HTTP REST API on port **8080** that allows remote control of all camera settings over Wi-Fi. This extends the limited API offered by Sony's built-in Smart Remote app.
+
+When the app starts, the camera's IP address is briefly displayed on screen (e.g. `API: 192.168.1.10:8080`). Connect a phone, laptop, or any HTTP client to the same Wi-Fi network to use it.
+
+### Quick reference ###
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/state` | All current settings as JSON |
+| GET | `/api/shutter` | Current shutter speed |
+| POST | `/api/shutter` | Set shutter speed (`n=1&d=100`) |
+| POST | `/api/shutter/increment` | Step shutter faster |
+| POST | `/api/shutter/decrement` | Step shutter slower |
+| GET | `/api/iso` | Current ISO and supported values |
+| POST | `/api/iso` | Set ISO (`value=400`, or `value=0` for auto) |
+| GET | `/api/aperture` | Current aperture |
+| POST | `/api/aperture/increment` | Open aperture one step |
+| POST | `/api/aperture/decrement` | Close aperture one step |
+| GET | `/api/ev` | Exposure compensation |
+| POST | `/api/ev` | Set exposure compensation (`value=3`) |
+| GET | `/api/mode` | Current shooting mode |
+| POST | `/api/mode` | Set mode (`mode=manual\|aperture\|shutter`) |
+| GET | `/api/drive` | Current drive mode |
+| POST | `/api/drive` | Set drive mode (`mode=single\|burst_high\|burst_low`) |
+| POST | `/api/capture` | Trigger shutter |
+
+See [API.md](API.md) for full documentation.
