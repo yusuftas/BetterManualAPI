@@ -17,7 +17,7 @@ android {
         //noinspection ExpiredTargetSdkVersion
         targetSdkVersion 10
         versionCode 7
-        versionName "1.5"
+        versionName "2.0.0"
         archivesBaseName = "BetterManual-${versionName}"
     }
     buildTypes {
