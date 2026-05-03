@@ -1,7 +1,13 @@
-# BetterManual
+# BetterManualAPI
 
-This app is intended to ease shooting in manual and aperture priority mode with (legacy) prime lenses on the A5100 camera. It uses the [OpenMemories Framework](https://github.com/ma1co/OpenMemories-Framework).
-**While the app may work on other cameras, it was written specifically for use with the A5100.**
+This is a fork of [BetterManual](https://github.com/obs1dium/BetterManual) that adds a **full HTTP REST API** for remote control of the camera over Wi-Fi. Using the API you can read and set shutter speed, ISO, aperture, exposure compensation, shooting mode, and drive mode - and trigger the shutter - from any HTTP client on the same network. This goes well beyond what Sony's built-in Smart Remote app exposes.
+
+See [API.md](API.md) for the full API reference, or jump to the [Quick reference](#quick-reference) below.
+
+---
+
+This app is intended to ease shooting in manual and aperture priority mode with (legacy) prime lenses on the A5x00 camera. It uses the [OpenMemories Framework](https://github.com/ma1co/OpenMemories-Framework).
+**While the app may work on other cameras, it was written specifically for use with the A5x00.**
 **Do not try to install it on cameras without a dedicated manual mode!**
 
 ## Installation ##
