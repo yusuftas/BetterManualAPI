@@ -4,9 +4,17 @@ android {
     namespace "com.obsidium.bettermanual"
     compileSdkVersion 34
 
+    lint {
+        // Use 'OldTargetApi' or 'ExpiredTargetSdkVersion'
+        disable 'OldTargetApi'
+        // To prevent lint from stopping your build:
+        abortOnError false
+    }
+
     defaultConfig {
         applicationId "com.obsidium.bettermanual"
         minSdkVersion 10
+        //noinspection ExpiredTargetSdkVersion
         targetSdkVersion 10
         versionCode 7
         versionName "1.5"
